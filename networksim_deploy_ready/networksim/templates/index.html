@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetSim — Network Topology Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div id="app">
+
+  <header id="topbar">
+    <div class="brand"><span class="brand-mark">&#9670;</span>NetSim<span class="brand-sub">schematic packet simulator</span></div>
+    <div class="toolbar">
+      <button data-action="add-router" class="tool-btn" title="Add a router">
+        <svg class="tbicon" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="11" rx="2"/><path d="M8 7v-2M12 7v-3M16 7v-2" stroke-linecap="round"/><path d="M7 12.5h10" stroke-linecap="round"/><path d="M9.5 10l-2 2.5 2 2.5M14.5 10l2 2.5-2 2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Router
+      </button>
+      <button data-action="add-switch" class="tool-btn" title="Add a switch">
+        <svg class="tbicon" viewBox="0 0 24 24"><rect x="2" y="9" width="20" height="8" rx="1.5"/><path d="M5 9V7M8.5 9V7M12 9V7M15.5 9V7M19 9V7" stroke-linecap="round"/><path d="M6 13h5M13 13h5" stroke-linecap="round"/><path d="M9 11l-2 2 2 2M15 11l2 2-2 2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Switch
+      </button>
+      <button data-action="add-pc" class="tool-btn" title="Add a PC">
+        <svg class="tbicon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M9 20h6M12 16v4" stroke-linecap="round"/></svg>
+        PC
+      </button>
+      <button data-action="add-server" class="tool-btn" title="Add a server (can run DHCP)">
+        <svg class="tbicon" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="7" rx="1.5"/><rect x="5" y="13" width="14" height="7" rx="1.5"/><path d="M8 6.5h.01M8 16.5h.01" stroke-linecap="round"/></svg>
+        Server
+      </button>
+      <span class="divider"></span>
+      <button data-action="link-mode" id="linkModeBtn" class="tool-btn" title="Draw a cable between two devices">
+        <svg class="tbicon" viewBox="0 0 24 24"><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="5" r="2.5"/><path d="M7 17L17 7" stroke-linecap="round"/></svg>
+        Link
+      </button>
+      <button data-action="delete-selected" id="deleteBtn" class="tool-btn danger" title="Delete the selected device or link">
+        <svg class="tbicon" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Delete
+      </button>
+      <span class="divider"></span>
+      <button data-action="load-demo" class="tool-btn accent">Load demo topology</button>
+      <button data-action="clear-all" class="tool-btn ghost">Clear all</button>
+    </div>
+  </header>
+
+  <main id="workspace">
+    <div id="canvasWrap">
+      <div id="presence" class="presence" title="People working on this topology right now"></div>
+      <svg id="canvas" viewBox="0 0 1600 900" preserveAspectRatio="xMinYMin meet">
+        <defs>
+          <pattern id="gridPattern" width="26" height="26" patternUnits="userSpaceOnUse">
+            <circle cx="1.2" cy="1.2" r="1.2" fill="var(--grid-dot)"/>
+          </pattern>
+        </defs>
+        <rect id="gridBg" x="0" y="0" width="1600" height="900" fill="url(#gridPattern)"/>
+        <g id="linksLayer"></g>
+        <g id="fxLayer"></g>
+        <g id="devicesLayer"></g>
+        <g id="cursorLayer" pointer-events="none"></g>
+      </svg>
+      <div id="linkHint" class="mode-hint hidden">Click a device to start a link, then click a second device to connect it. <span class="hint-key">Esc</span> to cancel.</div>
+      <div id="emptyHint" class="empty-hint">
+        <div class="empty-hint-inner">
+          <div class="empty-hint-title">Empty canvas</div>
+          <div class="empty-hint-body">Add a router, switch, or PC above — or load the demo topology to see a working two-site network.</div>
+        </div>
+      </div>
+    </div>
+
+    <aside id="sidePanel">
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="device">Device</button>
+        <button class="tab-btn" data-tab="cli">Console</button>
+        <button class="tab-btn" data-tab="ping">Simulate</button>
+        <button class="tab-btn" data-tab="rip">Routing</button>
+      </div>
+
+      <div class="tab-panels">
+        <section class="tab-panel active" id="panel-device">
+          <div id="deviceEmpty" class="empty-state">Select a device on the canvas to view its interfaces, routing table, ARP cache, or MAC table.</div>
+          <div id="deviceDetail" class="hidden"></div>
+        </section>
+
+        <section class="tab-panel" id="panel-cli">
+          <div id="cliEmpty" class="empty-state">Select a device to open its console.</div>
+          <div id="cliTerminal" class="hidden">
+            <div class="terminal-titlebar"><span id="cliDeviceName">—</span><span class="terminal-dot"></span></div>
+            <div id="cliScrollback" class="terminal"></div>
+            <div class="terminal-input-row">
+              <span id="cliPrompt" class="terminal-prompt">&gt;</span>
+              <input id="cliInput" class="terminal-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="type a command… (try 'help')"/>
+            </div>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="panel-ping">
+          <div class="field-group">
+            <label for="pingSrc">Source device</label>
+            <select id="pingSrc"></select>
+          </div>
+          <div class="field-group">
+            <label for="pingDst">Destination IP address</label>
+            <input id="pingDst" placeholder="e.g. 10.0.2.10"/>
+          </div>
+          <button id="pingSendBtn" class="primary-btn">
+            <svg class="tbicon" viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Send echo request
+          </button>
+          <div id="pingResultBanner" class="result-banner hidden"></div>
+          <div class="log-label">Event log</div>
+          <div id="eventLog" class="event-log"></div>
+        </section>
+
+        <section class="tab-panel" id="panel-rip">
+          <p class="panel-help">Runs simplified RIP distance-vector convergence across every router with <code>router rip</code> configured and a matching <code>network</code> statement. Split-horizon applies; metric is hop count.</p>
+          <button id="ripConvergeBtn" class="primary-btn">
+            <svg class="tbicon" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3" stroke-linecap="round"/><path d="M18 3v4h-4M6 21v-4h4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Converge RIP
+          </button>
+          <div class="log-label">Convergence log</div>
+          <div id="ripLog" class="event-log"></div>
+        </section>
+      </div>
+    </aside>
+  </main>
+
+  <footer id="statusbar">
+    <span id="statusText">Ready.</span>
+    <span id="statusCounts"></span>
+  </footer>
+</div>
+
+<script src="{{ url_for('static', filename='js/socket.io.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/canvas.js') }}"></script>
+<script src="{{ url_for('static', filename='js/cli.js') }}"></script>
+<script src="{{ url_for('static', filename='js/simulate.js') }}"></script>
+<script src="{{ url_for('static', filename='js/collab.js') }}"></script>
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
